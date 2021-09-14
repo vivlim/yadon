@@ -54,7 +54,7 @@ impl Write for BidingWriter {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        todo!()
+        Ok(())
     }
 }
 

@@ -6,6 +6,8 @@ use std::io::{Seek, SeekFrom, Write};
 pub struct BidingWriter {
     operations: Vec<WriteOperation>,
     virtual_position: Option<u64>,
+    start: Option<u64>,
+    length: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -16,10 +18,12 @@ pub enum WriteOperation {
 }
 
 impl BidingWriter {
-    pub fn new() -> Self {
+    pub fn new(start: Option<u64>, length: Option<u64>) -> Self {
         BidingWriter {
             operations: vec![],
             virtual_position: None,
+            start,
+            length,
         }
     }
 
@@ -62,23 +66,24 @@ impl Seek for BidingWriter {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         self.operations.push(WriteOperation::Seek(pos));
 
-        match (self.virtual_position, pos) {
-            (_, SeekFrom::Start(from_start)) => {
+        match (self.virtual_position, pos, self.start, self.length) {
+            (_, SeekFrom::Start(from_start), _, _) => {
                 self.virtual_position = Some(from_start);
             }
-            (None, SeekFrom::Current(from_current)) => {
-                if from_current > 0 {
-                    self.virtual_position = Some(from_current as u64);
-                }
-                else {
-                    self.virtual_position = Some(0); // We can't know what the final end position is, so just say we're at 0
-                }
+            (None, SeekFrom::Current(from_current), Some(start_position), _) => {
+                self.virtual_position = Some((start_position as i64 + from_current) as u64);
             }
-            (_, SeekFrom::End(_)) => {
-                self.virtual_position = Some(0); // We can't know what the end position of the final writer will actually be ... so just say that we're at the 0th position :|
+            (_, SeekFrom::End(from_end), _, Some(length)) => {
+                self.virtual_position = Some((length as i64 + from_end) as u64); // We can't know what the end position of the final writer will actually be ... so just say that we're at the 0th position :|
             }
-            (Some(current_pos), SeekFrom::Current(from_current)) => {
+            (Some(current_pos), SeekFrom::Current(from_current), _, _) => {
                 self.virtual_position = Some((current_pos as i64 + from_current) as u64)
+            }
+            (_, SeekFrom::End(_), _, None) => {
+                self.virtual_position = None;
+            }
+            (None, SeekFrom::Current(_), None, _) => {
+                self.virtual_position = None;
             }
         }
 
@@ -86,7 +91,6 @@ impl Seek for BidingWriter {
             Some(pos) => Ok(pos),
             None => Err(std::io::ErrorKind::Unsupported.into()),
         }
-        // Result 
     }
 }
 
@@ -97,7 +101,7 @@ mod tests {
 
     #[test]
     fn delayed_write() {
-        let mut later = BidingWriter::new();
+        let mut later = BidingWriter::new(Some(0), Some(16));
         later.seek(SeekFrom::Start(4)).unwrap();
         later.write(&[1,2,3]).unwrap();
         later.seek(SeekFrom::End(-2)).unwrap();
@@ -109,5 +113,57 @@ mod tests {
         let mut target_writer = Cursor::new(&mut target);
         later.apply(&mut target_writer).unwrap();
         assert_eq!(target, &[0, 0, 0, 0, 1, 2, 3, 0, 0, 0, 6, 7, 8, 0, 4, 5]);
+    }
+
+    #[test]
+    fn return_values() {
+        let mut now_target = vec![0u8; 128];
+        let mut now = Cursor::new(&mut now_target);
+        now.seek(SeekFrom::Start(27));
+        let mut later = BidingWriter::new(Some(27), Some(128));
+
+        assert_multi_seek(&mut now, &mut later, SeekFrom::Current(0));
+        assert_multi_seek(&mut now, &mut later, SeekFrom::Current(4));
+        assert_multi_write(&mut now, &mut later, &[1,2,3,4,5]);
+        assert_multi_seek(&mut now, &mut later, SeekFrom::Current(-2));
+        assert_multi_write(&mut now, &mut later, &[1,2,3,4,5]);
+        assert_multi_seek(&mut now, &mut later, SeekFrom::Start(27));
+        assert_multi_seek(&mut now, &mut later, SeekFrom::Current(2));
+        assert_multi_write(&mut now, &mut later, &[1,2]);
+        assert_multi_seek(&mut now, &mut later, SeekFrom::End(-12));
+        assert_multi_write(&mut now, &mut later, &[12; 14]);
+    }
+
+    fn assert_multi_write<T1, T2>(a: &mut T1, b: &mut T2, buf: &[u8])
+    where T1: Write + Seek, T2: Write + Seek {
+        let result1 = a.write(buf);
+        let result2 = b.write(buf);
+
+        match (result1, result2) {
+            (Ok(a_bytes), Ok(b_bytes)) => {
+                println!("{}, {} written", a_bytes, b_bytes);
+                assert_eq!(a_bytes, b_bytes)
+            },
+            (a_res, b_res) => {
+                assert!(false, "results differ: {:?} and {:?}", a_res, b_res);
+            }
+        }
+    }
+
+    fn assert_multi_seek<T1, T2>(a: &mut T1, b: &mut T2, pos: SeekFrom)
+    where T1: Write + Seek, T2: Write + Seek {
+        let result1 = a.seek(pos);
+        let result2 = b.seek(pos);
+
+        match (result1, result2) {
+            (Ok(a_pos), Ok(b_pos)) => {
+                println!("{}, {} seeked", a_pos, b_pos);
+                assert_eq!(a_pos, b_pos)
+            },
+            (a_res, b_res) => {
+                assert!(false, "results differ: {:?} and {:?}", a_res, b_res);
+            }
+        }
+
     }
 }

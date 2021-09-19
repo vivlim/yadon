@@ -101,7 +101,7 @@ impl Yadon {
         for operation in &self.operations {
             match operation {
                 WriteOperation::Write(data, expected_bytes_written) => {
-                    let bytes_written = target.write(&data)?;
+                    let bytes_written = target.write(data)?;
                     if check_return_values && *expected_bytes_written != bytes_written {
                         return Err(ApplyError::NumBytesWrittenDiverge(Confusion{
                             expected: *expected_bytes_written,

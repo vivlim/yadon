@@ -40,10 +40,13 @@ pub struct Yadon {
 /// Errors that may occur while applying `Yadon`.
 #[derive(Error, Debug)]
 pub enum ApplyError {
+    /// IO error while trying to replay operations.
     #[error("io error while trying to replay operations")]
     Io(#[from] std::io::Error),
+    /// Seek position diverged while trying to replay operations.
     #[error("seek position diverged while trying to replay operations")]
     SeekDiverged(Confusion<u64>),
+    /// Number of bytes written diverged while trying to replay operations.
     #[error("number of bytes written diverged while trying to replay operations")]
     NumBytesWrittenDiverge(Confusion<usize>)
 }
@@ -52,12 +55,14 @@ pub enum ApplyError {
 #[derive(Debug)]
 pub struct Confusion<T>
 where T: Debug {
+    /// The value which we returned when the operation was first simulated.
     pub expected: T,
+    /// The value which was returned when trying to apply this operation to another Write + Seek.
     pub actual: T,
 }
 
 #[derive(Debug)]
-/// Write / Seek operations which were called on Yadon
+/// Write + Seek operations which were called on Yadon
 pub enum WriteOperation {
     /// Write something, and check that the number of bytes written matches.
     Write(Vec<u8>, usize),

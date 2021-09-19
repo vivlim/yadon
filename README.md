@@ -1,6 +1,6 @@
 # yadon
 
-![picture of the Pokémon Slowpoke, whose original Japanese name is Yadon](079.png)
+![picture of the Pokémon Slowpoke, whose original Japanese name is Yadon](https://raw.githubusercontent.com/vivlim/yadon/main/079.png)
 
 *why write now, when you can write later?*
 

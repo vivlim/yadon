@@ -3,7 +3,7 @@ use std::io::{Seek, SeekFrom, Write};
 
 #[derive(Debug, Default)]
 /// Stores write and seek operations to be replayed later.
-pub struct BidingWriter {
+pub struct Yadon {
     operations: Vec<WriteOperation>,
     virtual_position: Option<u64>,
     start: Option<u64>,
@@ -11,15 +11,15 @@ pub struct BidingWriter {
 }
 
 #[derive(Debug)]
-/// Write / Seek operations which were called on the BidingWriter
+/// Write / Seek operations which were called on Yadon
 pub enum WriteOperation {
     Write(Vec<u8>),
     Seek(SeekFrom)
 }
 
-impl BidingWriter {
+impl Yadon {
     pub fn new(start: Option<u64>, length: Option<u64>) -> Self {
-        BidingWriter {
+        Yadon {
             operations: vec![],
             virtual_position: None,
             start,
@@ -45,7 +45,7 @@ impl BidingWriter {
     }
 }
 
-impl Write for BidingWriter {
+impl Write for Yadon {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.operations.push(WriteOperation::Write(buf.into()));
 
@@ -62,7 +62,7 @@ impl Write for BidingWriter {
     }
 }
 
-impl Seek for BidingWriter {
+impl Seek for Yadon {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         self.operations.push(WriteOperation::Seek(pos));
 
@@ -97,11 +97,11 @@ impl Seek for BidingWriter {
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Seek, SeekFrom, Write};
-    use crate::BidingWriter;
+    use crate::Yadon;
 
     #[test]
     fn delayed_write() {
-        let mut later = BidingWriter::new(Some(0), Some(16));
+        let mut later = Yadon::new(Some(0), Some(16));
         later.seek(SeekFrom::Start(4)).unwrap();
         later.write(&[1,2,3]).unwrap();
         later.seek(SeekFrom::End(-2)).unwrap();
@@ -120,7 +120,7 @@ mod tests {
         let mut now_target = vec![0u8; 128];
         let mut now = Cursor::new(&mut now_target);
         now.seek(SeekFrom::Start(27));
-        let mut later = BidingWriter::new(Some(27), Some(128));
+        let mut later = Yadon::new(Some(27), Some(128));
 
         assert_multi_seek(&mut now, &mut later, SeekFrom::Current(0));
         assert_multi_seek(&mut now, &mut later, SeekFrom::Current(4));
